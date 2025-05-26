@@ -1,4 +1,4 @@
-# Trigger deployment only on push to main branch
+
 on:
   push:
     branches:
@@ -7,7 +7,7 @@ on:
 jobs:
   build:
     name: Build Docker Image
-    runs-on: ubuntu-latest
+    runs-on: test-latest
 
     steps:
       - name: Checkout the files
@@ -19,18 +19,18 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@v2
         with:
-          username: alexismendozaa
-          password: ${{ secrets.DOCKER_PASSWORD }}  # Define your Docker Hub password in secrets
+          username: joeli2104
+          password: ${{ secrets.DOCKER_PASSWORD }}  
 
       - name: Build and push Docker image
         run: |
-          docker build -t alexismendozaa/ubuntu:latest .
-          docker push alexismendozaa/ubuntu:latest
+          docker build -t joeli2104/test:latest .
+          docker push joeli2104/test:latest
 
   deploy:
     name: Deploy to Local Machine (Optional Step)
-    runs-on: ubuntu-latest
-    needs: build  # Ensure deployment only occurs after the build job is successful
+    runs-on: test-latest
+    needs: build  
 
     steps:
       - name: Checkout the files
@@ -39,7 +39,7 @@ jobs:
       - name: Pull and Run Docker Container Locally
         run: |
           # Pull the latest Docker image from DockerHub
-          docker pull alexismendozaa/ubuntu:latest
+          docker pull joeli2104/test:latest
 
           # Run the Docker container locally
-          docker run -d -p 80:80 alexismendozaa/ubuntu:latest
+          docker run -d -p 80:80 joeli2104/test:latest
