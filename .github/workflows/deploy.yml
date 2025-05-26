@@ -1,45 +1,63 @@
-
+name: Deploy
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
-  build:
-    name: Build Docker Image
-    runs-on: test-latest
+  build-and-push:
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout the files
-        uses: actions/checkout@v2
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
         with:
-          username: joeli2104
-          password: ${{ secrets.DOCKER_PASSWORD }}  
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push Docker image
-        run: |
-          docker build -t joeli2104/test:latest .
-          docker push joeli2104/test:latest
+        uses: docker/build-push-action@v5
+        with:
+          context: ./test
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/test:latest
+          build-args: |
 
-  deploy:
-    name: Deploy to Local Machine (Optional Step)
-    runs-on: test-latest
-    needs: build  
-
+  deploy-to-ec2:
+    needs: build-and-push
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout the files
-        uses: actions/checkout@v2
-
-      - name: Pull and Run Docker Container Locally
+      - name: Install SSH key
         run: |
-          # Pull the latest Docker image from DockerHub
-          docker pull joeli2104/test:latest
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
+          ssh-keyscan ${{ secrets.TEST_EC2_HOST }} >> ~/.ssh/known_hosts
 
-          # Run the Docker container locally
-          docker run -d -p 80:80 joeli2104/test:latest
+      - name: Verify SSH connection
+        run: ssh -i ~/.ssh/ec2_key ubuntu@${{ secrets.TEST_EC2_HOST }} "echo 'SSH connection successful!'"
+
+      - name: Deploy to EC2
+        run: |
+          ssh -i ~/.ssh/ec2_key ubuntu@${{ secrets.TEST_EC2_HOST }} << 'EOF'
+          # Stop and remove existing container
+          sudo docker stop test || true
+          sudo docker rm test || true
+          
+          # Pull the latest image from Docker Hub
+          sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/test:latest
+          
+          # Run new container with environment variables
+          sudo docker run -d \
+           --name test \
+           --restart unless-stopped \
+          "${{ secrets.DOCKERHUB_USERNAME }}/test:latest"
+          
+          # Verify container is running
+          sudo docker ps | grep test
+          EOF
